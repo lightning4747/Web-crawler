@@ -33,9 +33,16 @@ vi.mock("../config.js", () => {
   };
 });
 
+vi.mock("../frontier/robots.js", () => {
+  return {
+    isAllowedByRobots: vi.fn(),
+  };
+});
+
 import { downloadPage } from "../worker/downloader.js";
 import { extractPageData } from "../worker/extractor.js";
 import { insertURL, insertLink, markDone, markFailed } from "../db/queries.js";
+import { isAllowedByRobots } from "../frontier/robots.js";
 import { processPage } from "../worker/worker.js";
 
 const mockDownloadPage = vi.mocked(downloadPage);
@@ -44,10 +51,12 @@ const mockInsertURL = vi.mocked(insertURL);
 const mockInsertLink = vi.mocked(insertLink);
 const mockMarkDone = vi.mocked(markDone);
 const mockMarkFailed = vi.mocked(markFailed);
+const mockIsAllowedByRobots = vi.mocked(isAllowedByRobots);
 
 describe("Worker Pipeline", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsAllowedByRobots.mockResolvedValue(true);
   });
 
   it("should successfully process a page, extract content, and insert links", async () => {
@@ -120,5 +129,16 @@ describe("Worker Pipeline", () => {
     expect(mockMarkDone).toHaveBeenCalledTimes(1);
     expect(mockInsertURL).not.toHaveBeenCalled();
     expect(mockInsertLink).not.toHaveBeenCalled();
+  });
+
+  it("should abort crawl if URL is disallowed by robots.txt", async () => {
+    mockIsAllowedByRobots.mockResolvedValue(false);
+
+    await processPage({ id: 42, url: "https://react.dev/private", depth: 1 });
+
+    expect(mockMarkFailed).toHaveBeenCalledTimes(1);
+    expect(mockMarkFailed).toHaveBeenCalledWith(42, "Disallowed by robots.txt");
+    expect(mockDownloadPage).not.toHaveBeenCalled();
+    expect(mockMarkDone).not.toHaveBeenCalled();
   });
 });

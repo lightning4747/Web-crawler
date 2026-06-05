@@ -3,6 +3,7 @@ import { extractPageData } from "./extractor.js";
 import { normalizeURL, getDomain } from "../normalizer.js";
 import { insertURL, insertLink, markDone, markFailed } from "../db/queries.js";
 import { config } from "../config.js";
+import { isAllowedByRobots } from "../frontier/robots.js";
 
 function isDomainAllowed(domain: string): boolean {
   if (!config.ALLOWED_DOMAINS || config.ALLOWED_DOMAINS.length === 0) {
@@ -26,6 +27,13 @@ export async function processPage(urlRow: { id: number; url: string; depth: numb
   const currentDepth = urlRow.depth;
 
   try {
+    // 0. Check robots.txt compliance
+    const allowed = await isAllowedByRobots(pageUrl);
+    if (!allowed) {
+      await markFailed(urlId, "Disallowed by robots.txt");
+      return;
+    }
+
     // 1. Download page content
     const downloadResult = await downloadPage(pageUrl);
 
