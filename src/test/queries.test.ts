@@ -12,7 +12,17 @@ vi.mock("../db/client.js", () => {
 
 // Import the mocked query and pool
 import { query, pool } from "../db/client.js";
-import { claimNextURL, markDone, markFailed, insertURL, insertLink, resetStaleLocks } from "../db/queries.js";
+import {
+  claimNextURL,
+  markDone,
+  markFailed,
+  insertURL,
+  insertLink,
+  resetStaleLocks,
+  getGlobalStats,
+  refreshDomainStats,
+  getDomainStats,
+} from "../db/queries.js";
 
 const mockedQuery = vi.mocked(query);
 const mockedPool = vi.mocked(pool);
@@ -159,6 +169,78 @@ describe("Database Queries", () => {
       );
       expect(mockedQuery).toHaveBeenCalledWith(
         expect.stringContaining("status = 'FETCHING'")
+      );
+    });
+  });
+
+  describe("getGlobalStats", () => {
+    it("should map query results to GlobalStats structure", async () => {
+      mockedQuery.mockResolvedValue({
+        rows: [
+          { status: "PENDING", count: "10" },
+          { status: "DONE", count: "5" },
+        ],
+      } as any);
+
+      const stats = await getGlobalStats();
+      expect(stats).toEqual({
+        pending: 10,
+        fetching: 0,
+        done: 5,
+        failed: 0,
+      });
+      expect(mockedQuery).toHaveBeenCalledWith(
+        expect.stringContaining("SELECT status, COUNT(*)")
+      );
+    });
+  });
+
+  describe("refreshDomainStats", () => {
+    it("should run CREATE TABLE and INSERT INTO domain_stats query", async () => {
+      mockedQuery.mockResolvedValue({ rows: [] } as any);
+      await refreshDomainStats();
+
+      expect(mockedQuery).toHaveBeenCalledTimes(2);
+      expect(mockedQuery).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining("CREATE TABLE IF NOT EXISTS domain_stats")
+      );
+      expect(mockedQuery).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining("INSERT INTO domain_stats")
+      );
+    });
+  });
+
+  describe("getDomainStats", () => {
+    it("should fetch and format domain stats", async () => {
+      const lastCrawled = new Date();
+      mockedQuery.mockResolvedValue({
+        rows: [
+          {
+            domain: "react.dev",
+            pending_count: "5",
+            fetching_count: "1",
+            done_count: "10",
+            failed_count: "2",
+            last_crawled_at: lastCrawled.toISOString(),
+          },
+        ],
+      } as any);
+
+      const stats = await getDomainStats();
+      expect(stats).toEqual([
+        {
+          domain: "react.dev",
+          pending_count: 5,
+          fetching_count: 1,
+          done_count: 10,
+          failed_count: 2,
+          last_crawled_at: lastCrawled,
+        },
+      ]);
+      expect(mockedQuery).toHaveBeenCalledWith(
+        expect.stringContaining("SELECT domain, pending_count")
       );
     });
   });

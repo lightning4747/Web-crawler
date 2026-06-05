@@ -136,3 +136,96 @@ export async function resetStaleLocks(): Promise<void> {
      WHERE status = 'FETCHING'`
   );
 }
+
+export interface GlobalStats {
+  pending: number;
+  fetching: number;
+  done: number;
+  failed: number;
+}
+
+export interface DomainStats {
+  domain: string;
+  pending_count: number;
+  fetching_count: number;
+  done_count: number;
+  failed_count: number;
+  last_crawled_at: Date | null;
+}
+
+/**
+ * Retrieves aggregate statistics across all URLs.
+ */
+export async function getGlobalStats(): Promise<GlobalStats> {
+  const res = await query(
+    `SELECT status, COUNT(*) as count
+     FROM urls
+     GROUP BY status`
+  );
+
+  const stats: GlobalStats = { pending: 0, fetching: 0, done: 0, failed: 0 };
+  for (const row of res.rows) {
+    const status = row.status.toLowerCase();
+    const count = parseInt(row.count, 10);
+    if (status === "pending") stats.pending = count;
+    else if (status === "fetching") stats.fetching = count;
+    else if (status === "done") stats.done = count;
+    else if (status === "failed") stats.failed = count;
+  }
+  return stats;
+}
+
+/**
+ * Recomputes and updates domain-level stats in the domain_stats table.
+ */
+export async function refreshDomainStats(): Promise<void> {
+  await query(`
+    CREATE TABLE IF NOT EXISTS domain_stats (
+      domain TEXT PRIMARY KEY,
+      pending_count INTEGER NOT NULL DEFAULT 0,
+      fetching_count INTEGER NOT NULL DEFAULT 0,
+      done_count INTEGER NOT NULL DEFAULT 0,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      last_crawled_at TIMESTAMPTZ
+    )
+  `);
+
+  await query(`
+    INSERT INTO domain_stats (domain, pending_count, fetching_count, done_count, failed_count, last_crawled_at)
+    SELECT
+      domain,
+      COUNT(*) FILTER (WHERE status = 'PENDING') as pending_count,
+      COUNT(*) FILTER (WHERE status = 'FETCHING') as fetching_count,
+      COUNT(*) FILTER (WHERE status = 'DONE') as done_count,
+      COUNT(*) FILTER (WHERE status = 'FAILED') as failed_count,
+      MAX(fetched_at) as last_crawled_at
+    FROM urls
+    GROUP BY domain
+    ON CONFLICT (domain) DO UPDATE SET
+      pending_count = EXCLUDED.pending_count,
+      fetching_count = EXCLUDED.fetching_count,
+      done_count = EXCLUDED.done_count,
+      failed_count = EXCLUDED.failed_count,
+      last_crawled_at = EXCLUDED.last_crawled_at
+  `);
+}
+
+/**
+ * Retrieves per-domain statistics.
+ */
+export async function getDomainStats(): Promise<DomainStats[]> {
+  const res = await query(
+    `SELECT domain, pending_count, fetching_count, done_count, failed_count, last_crawled_at
+     FROM domain_stats
+     ORDER BY domain ASC`
+  );
+  return res.rows.map((row) => ({
+    domain: row.domain,
+    pending_count: parseInt(row.pending_count, 10),
+    fetching_count: parseInt(row.fetching_count, 10),
+    done_count: parseInt(row.done_count, 10),
+    failed_count: parseInt(row.failed_count, 10),
+    last_crawled_at: row.last_crawled_at ? new Date(row.last_crawled_at) : null,
+  }));
+}
+

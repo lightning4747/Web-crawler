@@ -30,3 +30,14 @@ CREATE TABLE IF NOT EXISTS links (
   to_url_id     INTEGER NOT NULL REFERENCES urls(id) ON DELETE CASCADE,
   PRIMARY KEY (from_url_id, to_url_id)
 );
+
+-- Domain statistics for observability
+CREATE TABLE IF NOT EXISTS domain_stats (
+  domain TEXT PRIMARY KEY,
+  pending_count INTEGER NOT NULL DEFAULT 0,
+  fetching_count INTEGER NOT NULL DEFAULT 0,
+  done_count INTEGER NOT NULL DEFAULT 0,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  last_crawled_at TIMESTAMPTZ
+);
+

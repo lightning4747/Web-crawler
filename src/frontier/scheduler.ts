@@ -2,6 +2,7 @@ import { config } from "../config.js";
 import { claimNextURL } from "../db/queries.js";
 import { getPendingDomains } from "./frontier.js";
 import { processPage } from "../worker/worker.js";
+import { startProgressLogger, stopProgressLogger } from "./logger.js";
 
 const cooldowns = new Map<string, number>();
 
@@ -18,6 +19,9 @@ export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve
 export async function startScheduler(): Promise<void> {
   if (isRunning) return;
   isRunning = true;
+
+  // Start the periodic progress logger
+  await startProgressLogger();
 
   while (isRunning) {
     // 1. Enforce worker concurrency limit
@@ -82,10 +86,12 @@ export async function startScheduler(): Promise<void> {
   }
 
   isRunning = false;
+  stopProgressLogger();
 }
 
 export function stopScheduler() {
   isRunning = false;
+  stopProgressLogger();
 }
 
 export function getActiveWorkersCount() {
@@ -95,3 +101,4 @@ export function getActiveWorkersCount() {
 export function getCooldown(domain: string) {
   return cooldowns.get(domain) || 0;
 }
+
