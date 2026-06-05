@@ -16,7 +16,7 @@ vi.mock("pg", () => {
   };
 });
 
-import { pool, query, closePool } from "./client.js";
+import { pool, query, closePool } from "../db/client.js";
 
 describe("Database Client", () => {
   it("should expose pool and query function", async () => {

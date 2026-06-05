@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeURL, getDomain } from "./normalizer.js";
+import { normalizeURL, getDomain } from "../normalizer.js";
 
 describe("URL Normalizer", () => {
   describe("normalizeURL", () => {
